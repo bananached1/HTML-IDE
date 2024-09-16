@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authentication</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: rgb(0,0,0);
+            background: linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(9,9,121,1) 35%, rgba(139,0,255,1) 100%);
+        }
+        #settings-container, #auth-container {
+            display: none; /* Hide both containers initially */
+            flex-direction: column;
+            color: white;
+            align-items: center;
+            /* From https://css.glass */
+            background: rgba(255, 255, 255, 0.21);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10.2px);
+            -webkit-backdrop-filter: blur(10.2px);
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #settings-container.active, #auth-container.active {
+            display: flex; /* Display the active container */
+        }
+        #settings-container h1, #auth-container h1 {
+            margin-bottom: 20px;
+        }
+        #settings-container input, #auth-container input {
+            margin: 10px 0;
+            padding: 10px;
+            width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #settings-container button, #auth-container button {
+            padding: 10px;
+            margin: 10px 0;
+            width: 220px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #settings-container button#sign-out-button {
+            background-color: #ff7b00;
+            color: black;
+            border: none;
+        }
+        #auth-container button#login-button {
+            border: 2px solid #ff7b00;
+            background-color: transparent;
+            color: white;
+        }
+        #auth-container button#login-button:hover {
+            border-color: #d66a04;
+        }
+        #auth-container button#signup-button {
+            background-color: #ff7b00;
+            color: black;
+            border: none;
+        }
+        #auth-container button#signup-button:hover {
+            background-color: #d66a04;
+        }
+
+        /* Home button */
+        #homebutton {
+            background-color: transparent;
+            color: white !important; /* Ensure text color is white */
+            border: none; /* Add if you want no border */
+            padding: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        /* Update button */
+        #update-button {
+            border: 2px solid #ff7b00; /* Ensure correct border */
+            background-color: transparent; 
+            color: white !important; /* Ensure text color is white */
+            padding: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #update-button:hover {
+            border-color: #d66a04; /* Optional: Change border color on hover */
+            color: #d66a04; /* Optional: Change text color on hover */
+        }
+
+        /* Google sign-in button */
+        #google-signin-button {
+            background-color: white;
+            color: black;
+            padding: 10px;
+            width: 220px;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #google-signin-button img {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+        }
+
+        #google-signin-button:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDzWwiSokdYGCrGQJD3_hfYG-U0J7QUjkE",
+            authDomain: "stargate-9e3fd.firebaseapp.com",
+            projectId: "stargate-9e3fd",
+            storageBucket: "stargate-9e3fd.appspot.com",
+            messagingSenderId: "102730750952",
+            appId: "1:102730750952:web:d77621a07dbfca80ace25d",
+            measurementId: "G-9Y20K2CS6Z"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const displayNameInput = document.getElementById('display-name-input');
+            const updateButton = document.getElementById('update-button');
+            const signOutButton = document.getElementById('sign-out-button');
+            const authContainer = document.getElementById('auth-container');
+            const settingsContainer = document.getElementById('settings-container');
+            const googleSigninButton = document.getElementById('google-signin-button');
+
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const loginButton = document.getElementById('login-button');
+            const signupButton = document.getElementById('signup-button');
+
+            const ensureUserDocExists = async (user) => {
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDoc = await getDoc(userDocRef);
+                if (!userDoc.exists()) {
+                    await setDoc(userDocRef, { displayName: user.displayName || '' });
+                }
+            };
+
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    await ensureUserDocExists(user);
+                    const userDocRef = doc(db, 'users', user.uid);
+                    const userDoc = await getDoc(userDocRef);
+                    displayNameInput.value = userDoc.data().displayName || '';
+
+                    settingsContainer.classList.add('active');
+                    authContainer.classList.remove('active');
+                } else {
+                    authContainer.classList.add('active');
+                    settingsContainer.classList.remove('active');
+                }
+            });
+
+            // Handle login
+            loginButton.addEventListener('click', async () => {
+                const email = emailInput.value.trim();
+                const password = passwordInput.value.trim();
+
+                if (email && password) {
+                    try {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    } catch (error) {
+                        console.error('Error during login: ', error);
+                        alert(`Login failed: ${error.message}`);
+                    }
+                } else {
+                    alert('Please enter both email and password.');
+                }
+            });
+
+            // Handle signup
+            signupButton.addEventListener('click', async () => {
+                const email = emailInput.value.trim();
+                const password = passwordInput.value.trim();
+
+                if (email && password) {
+                    try {
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                        const user = userCredential.user;
+                        await ensureUserDocExists(user);
+                        const userDocRef = doc(db, 'users', user.uid);
+                        const userDoc = await getDoc(userDocRef);
+                        displayNameInput.value = userDoc.data().displayName || '';
+
+                        settingsContainer.classList.add('active');
+                        authContainer.classList.remove('active');
+                    } catch (error) {
+                        console.error('Error during signup: ', error);
+                        alert(`Signup failed: ${error.message}`);
+                    }
+                } else {
+                    alert('Please enter both email and password.');
+                }
+            });
+
+            // Handle Google sign-in
+            googleSigninButton.addEventListener('click', async () => {
+                const provider = new GoogleAuthProvider();
+                try {
+                    const result = await signInWithPopup(auth, provider);
+                    const user = result.user;
+                    await ensureUserDocExists(user);
+                    displayNameInput.value = user.displayName || '';
+
+                    settingsContainer.classList.add('active');
+                    authContainer.classList.remove('active');
+                } catch (error) {
+                    console.error('Error during Google sign-in: ', error);
+                    alert(`Google sign-in failed: ${error.message}`);
+                }
+            });
+
+            // Update display name
+            updateButton.addEventListener('click', async () => {
+                const newDisplayName = displayNameInput.value.trim();
+                if (newDisplayName && auth.currentUser) {
+                    try {
+                        await updateProfile(auth.currentUser, { displayName: newDisplayName });
+                        const userDocRef = doc(db, 'users', auth.currentUser.uid);
+                        await updateDoc(userDocRef, { displayName: newDisplayName });
+                        alert('Display name updated successfully!');
+                    } catch (error) {
+                        console.error('Error updating display name: ', error);
+                        alert('Failed to update display name. Please try again.');
+                    }
+                } else {
+                    alert('Please enter a valid display name.');
+                }
+            });
+
+            // Sign out
+            signOutButton.addEventListener('click', () => {
+                signOut(auth).then(() => {
+                    settingsContainer.classList.remove('active');
+                    authContainer.classList.add('active');
+                }).catch((error) => {
+                    console.error('Error signing out: ', error);
+                    alert('Failed to sign out. Please try again.');
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <div id="auth-container">
+        <h1>Authentication</h1>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button id="login-button">Log In</button>
+        <button id="signup-button">Sign Up</button>
+        <button id="google-signin-button">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo">
+            Sign in with Google
+        </button>
+    </div>
+
+    <div id="settings-container">
+        <h1>Settings</h1>
+        <input type="text" id="display-name-input" placeholder="Enter new display name">
+        <button id="update-button">Update Display Name</button>
+        <button id="sign-out-button">Sign Out</button>
+        <a href="index.html">
+            <button id="homebutton">Home</button>
+        </a>
+    </div>
+</body>
+</html>
